@@ -104,6 +104,14 @@ class ModelManager(private val context: Context) {
             connection.readTimeout = 120_000
             connection.connect()
 
+            val responseCode = connection.responseCode
+            Log.d(tag, "HTTP $responseCode for $remoteUrl")
+            if (responseCode != 200 && responseCode != 206) {
+                Log.e(tag, "HTTP $responseCode for $remoteUrl")
+                connection.disconnect()
+                return null
+            }
+
             val totalBytes = connection.contentLength.toLong()
             val inputStream: InputStream = connection.inputStream
             val outputStream = FileOutputStream(outputFile)

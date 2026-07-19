@@ -223,19 +223,24 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                         val url = "https://huggingface.co/${dl.repo}/resolve/main/${dl.file}"
 
                                         val result = withContext(Dispatchers.IO) {
-                                            modelManager.downloadModel(
-                                                modelName = dl.file,
-                                                remoteUrl = url,
-                                                progress = { downloaded, total ->
-                                                    val fileFraction = downloaded.toFloat() / total.toFloat()
-                                                    downloadProgress = (totalDownloaded + fileFraction * totalBytes) / totalBytes
-                                                    downloadStatus = "${dl.name} : ${downloaded / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
-                                                }
-                                            )
+                                            try {
+                                                modelManager.downloadModel(
+                                                    modelName = dl.file,
+                                                    remoteUrl = url,
+                                                    progress = { downloaded, total ->
+                                                        val fileFraction = downloaded.toFloat() / total.toFloat()
+                                                        downloadProgress = (totalDownloaded + fileFraction * totalBytes) / totalBytes
+                                                        downloadStatus = "${dl.name} : ${downloaded / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
+                                                    }
+                                                )
+                                            } catch (e: Exception) {
+                                                downloadError = "${e.message?.take(80) ?: "Erreur inconnue"}"
+                                                null
+                                            }
                                         }
 
                                         if (result == null) {
-                                            downloadError = "Échec du téléchargement de ${dl.name}"
+                                            if (downloadError.isNullOrBlank()) downloadError = "Échec : ${dl.name}"
                                             isDownloading = false
                                             return@launch
                                         }
