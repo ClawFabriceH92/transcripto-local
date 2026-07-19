@@ -120,63 +120,74 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                     analyzing = true
                     scope.launch {
                         AppLogger.i("Analyse LLM lanc\u00e9e #${recording.id}")
+                        try {
+                            val profile = ModelProfiles.ULTRA_LIGHT.profile
+                            val llmModel = modelManager.getLlmModelFile(profile)
 
-                        val profile = ModelProfiles.ULTRA_LIGHT.profile
-                        val llmModel = modelManager.getLlmModelFile(profile)
+                            if (!llmModel.exists()) {
+                                AppLogger.e("Mod\u00e8le LLM introuvable : ${llmModel.absolutePath}")
+                                analyzing = false
+                                return@launch
+                            }
 
-                        if (!llmModel.exists()) {
-                            AppLogger.e("Mod\u00e8le LLM introuvable : ${llmModel.absolutePath}")
-                            analyzing = false
-                            return@launch
+                            val llm = LlamaLlmEngine()
+
+                            // Charger le mod\u00e8le
+                            AppLogger.i("Chargement du LLM...")
+                            val loadResult = withContext(Dispatchers.IO) {
+                                llm.loadModel(llmModel.absolutePath)
+                            }
+                            if (loadResult.isFailure) {
+                                AppLogger.e("LLM: \u00e9chec chargement mod\u00e8le")
+                                analyzing = false
+                                return@launch
+                            }
+
+                            AppLogger.i("LLM: mod\u00e8le charg\u00e9, lancement des analyses")
+
+                            // R\u00e9sum\u00e9
+                            AppLogger.i("G\u00e9n\u00e9ration du r\u00e9sum\u00e9...")
+                            val summaryResult = withContext(Dispatchers.IO) {
+                                llm.analyze(LlmQuery(recording.fullText, PromptType.SUMMARY))
+                            }
+                            val summary = when (summaryResult) {
+                                is LlmResult.Success -> summaryResult.text
+                                else -> "Erreur: ${(summaryResult as? LlmResult.Error)?.message}"
+                            }
+
+                            // Points cl\u00e9s
+                            AppLogger.i("Extraction des points cl\u00e9s...")
+                            val kpResult = withContext(Dispatchers.IO) {
+                                llm.analyze(LlmQuery(recording.fullText, PromptType.KEY_POINTS))
+                            }
+                            val keyPoints = when (kpResult) {
+                                is LlmResult.Success -> kpResult.text
+                                else -> "Erreur: ${(kpResult as? LlmResult.Error)?.message}"
+                            }
+
+                            // Actions
+                            AppLogger.i("Identification des actions...")
+                            val actionsResult = withContext(Dispatchers.IO) {
+                                llm.analyze(LlmQuery(recording.fullText, PromptType.ACTIONS))
+                            }
+                            val actions = when (actionsResult) {
+                                is LlmResult.Success -> actionsResult.text
+                                else -> "Erreur: ${(actionsResult as? LlmResult.Error)?.message}"
+                            }
+
+                            appState.setAnalysis(recording.id, summary, keyPoints, actions)
+
+                            // Lib\u00e9rer la m\u00e9moire
+                            withContext(Dispatchers.IO) { llm.unloadModel() }
+
+                            AppLogger.i("Analyse LLM termin\u00e9e #${recording.id}")
+                        } catch (e: Exception) {
+                            AppLogger.e("CRASH analyse: ${e.message}")
+                            appState.setAnalysis(recording.id,
+                                "Erreur: ${e.message}",
+                                "Erreur: ${e.message}",
+                                "Erreur: ${e.message}")
                         }
-
-                        val llm = LlamaLlmEngine()
-
-                        // Charger le mod\u00e8le
-                        val loadResult = withContext(Dispatchers.IO) {
-                            llm.loadModel(llmModel.absolutePath)
-                        }
-                        if (loadResult.isFailure) {
-                            AppLogger.e("LLM: \u00e9chec chargement mod\u00e8le")
-                            analyzing = false
-                            return@launch
-                        }
-
-                        AppLogger.i("LLM: mod\u00e8le charg\u00e9, lancement des analyses")
-
-                        // R\u00e9sum\u00e9
-                        val summaryResult = withContext(Dispatchers.IO) {
-                            llm.analyze(LlmQuery(recording.fullText, PromptType.SUMMARY))
-                        }
-                        val summary = when (summaryResult) {
-                            is LlmResult.Success -> summaryResult.text
-                            else -> "Erreur: ${(summaryResult as? LlmResult.Error)?.message}"
-                        }
-
-                        // Points cl\u00e9s
-                        val kpResult = withContext(Dispatchers.IO) {
-                            llm.analyze(LlmQuery(recording.fullText, PromptType.KEY_POINTS))
-                        }
-                        val keyPoints = when (kpResult) {
-                            is LlmResult.Success -> kpResult.text
-                            else -> "Erreur: ${(kpResult as? LlmResult.Error)?.message}"
-                        }
-
-                        // Actions
-                        val actionsResult = withContext(Dispatchers.IO) {
-                            llm.analyze(LlmQuery(recording.fullText, PromptType.ACTIONS))
-                        }
-                        val actions = when (actionsResult) {
-                            is LlmResult.Success -> actionsResult.text
-                            else -> "Erreur: ${(actionsResult as? LlmResult.Error)?.message}"
-                        }
-
-                        appState.setAnalysis(recording.id, summary, keyPoints, actions)
-
-                        // Lib\u00e9rer la m\u00e9moire
-                        withContext(Dispatchers.IO) { llm.unloadModel() }
-
-                        AppLogger.i("Analyse LLM termin\u00e9e #${recording.id}")
                         analyzing = false
                     }
                 },
@@ -226,7 +237,7 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                 0 -> AnalysisCard(title = "R\u00e9sum\u00e9", text = recording.summary.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
                 1 -> AnalysisCard(title = "Points cl\u00e9s", text = recording.keyPoints.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
                 2 -> AnalysisCard(title = "Actions", text = recording.actions.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
-                3 -> QaSection(fullText = recording.fullText, llmEngine = LlamaLlmEngine(), llmModel = modelManager.getLlmModelFile(ModelProfiles.ULTRA_LIGHT.profile))
+                3 -> QaSection(fullText = recording.fullText)
             }
         }
 
@@ -268,11 +279,14 @@ private fun AnalysisCard(title: String, text: String) {
 }
 
 @Composable
-private fun QaSection(fullText: String, llmEngine: com.transcripto.local.llm.LlamaLlmEngine, llmModel: java.io.File) {
+private fun QaSection(fullText: String) {
     var question by remember { mutableStateOf("") }
     var answer by remember { mutableStateOf<String?>(null) }
     var answering by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val modelManager = remember { ModelManager(context) }
+    val llmModel = remember { modelManager.getLlmModelFile(ModelProfiles.ULTRA_LIGHT.profile) }
 
     Column {
         Card(
@@ -309,18 +323,23 @@ private fun QaSection(fullText: String, llmEngine: com.transcripto.local.llm.Lla
                             answering = true
                             answer = null
                             scope.launch {
-                                val loadResult = withContext(Dispatchers.IO) { llmEngine.loadModel(llmModel.absolutePath) }
-                                if (loadResult.isSuccess) {
-                                    val result = withContext(Dispatchers.IO) {
-                                        llmEngine.analyze(LlmQuery(fullText, PromptType.FREE_QUERY, freeQuery = question))
+                                val llmEngine = LlamaLlmEngine()
+                                try {
+                                    val loadResult = withContext(Dispatchers.IO) { llmEngine.loadModel(llmModel.absolutePath) }
+                                    if (loadResult.isSuccess) {
+                                        val result = withContext(Dispatchers.IO) {
+                                            llmEngine.analyze(LlmQuery(fullText, PromptType.FREE_QUERY, freeQuery = question))
+                                        }
+                                        answer = when (result) {
+                                            is LlmResult.Success -> result.text
+                                            else -> "Erreur: ${(result as? LlmResult.Error)?.message}"
+                                        }
+                                        withContext(Dispatchers.IO) { llmEngine.unloadModel() }
+                                    } else {
+                                        answer = "Erreur de chargement du mod\u00e8le"
                                     }
-                                    answer = when (result) {
-                                        is com.transcripto.local.llm.LlmResult.Success -> result.text
-                                        else -> "Erreur: ${(result as? com.transcripto.local.llm.LlmResult.Error)?.message}"
-                                    }
-                                    withContext(Dispatchers.IO) { llmEngine.unloadModel() }
-                                } else {
-                                    answer = "Erreur de chargement du mod\u00e8le"
+                                } catch (e: Exception) {
+                                    answer = "Erreur: ${e.message}"
                                 }
                                 answering = false
                             }
