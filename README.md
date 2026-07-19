@@ -107,15 +107,7 @@ transcripto-local/
 └── README.md
 ```
 
-## Roadmap
 
-| Phase | Contenu | Durée |
-|---|---|---|
-| 1 — Socle | Intégration whisper.cpp + llama.cpp, détection RAM | 2-3 sem. |
-| 2 — Pipeline | Enregistrement, STT, édition transcription | 1-2 sem. |
-| 3 — Analyse | Prompts LLM, résumé, extraction, Q/R | 2 sem. |
-| 4 — Sécurité | Chiffrement, suppression, verrouillage | 1 sem. |
-| 5 — Tests | Multi-appareils, optimisation, profils RAM | 2 sem. |
 
 ## Licence
 
