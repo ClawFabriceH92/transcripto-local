@@ -24,3 +24,5 @@ app/src/main/jniLibs/
 *.gguf
 *.wav
 *.mp3
+app/build/
+build/

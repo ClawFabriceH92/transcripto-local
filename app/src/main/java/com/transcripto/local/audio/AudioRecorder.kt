@@ -126,7 +126,6 @@ class MediaRecorderAudioRecorder(
             recorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS)
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioSamplingRate(44100)
-            recorder.setAudioBitRate(128000)
             recorder.setOutputFile(outputFile.absolutePath)
 
             // Prepare synchronously (or use setOnInfoListener for async)

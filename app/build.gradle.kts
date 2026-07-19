@@ -47,7 +47,12 @@ android {
 
     buildFeatures {
         compose = true
-        prefab = true
+    }
+
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
     }
 
     packaging {
@@ -87,15 +92,13 @@ dependencies {
 
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-
-    // NDK / Prefab — for whisper.cpp and llama.cpp JNI integration
-    implementation("com.google.prefab:prefab-gradle-plugin:2.0.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
