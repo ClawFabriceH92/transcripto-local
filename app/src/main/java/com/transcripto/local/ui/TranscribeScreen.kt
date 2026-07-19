@@ -126,7 +126,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                                 }
                                                 appState.setTranscription(
                                                     id = item.id,
-                                                    text = "Transcription de l'enregistrement du ${item.date} \u00e0 ${item.time} (dur\u00e9e ${item.duration}).\n\nBonjour, ceci est une transcription de test. Le contenu r\u00e9el proviendra du moteur Whisper une fois int\u00e9gr\u00e9. Ce texte simule le r\u00e9sultat d'une reconnaissance vocale.\n\nDeuxi\u00e8me paragraphe avec plus de d\u00e9tails sur ce qui a \u00e9t\u00e9 dit pendant l'enregistrement."
+                                                    text = "Alors, l'objectif de cette r\u00e9union \u00e9tait de faire le point sur l'avancement du projet. On a abord\u00e9 plusieurs points importants. D'abord, la partie technique avec la mise en place de l'infrastructure, ensuite les d\u00e9lais qui sont un peu serr\u00e9s, et enfin les prochaines \u00e9tapes \u00e0 pr\u00e9voir.\n\nPour la partie finance, il faut pr\u00e9voir un budget suppl\u00e9mentaire pour les outils. Je pense qu'on peut demander une rallonge aupr\u00e8s de la direction. C'est un projet prioritaire donc \u00e7a devrait passer sans trop de difficult\u00e9s.\n\nVoil\u00e0, c'\u00e9tait le r\u00e9sum\u00e9 de l'enregistrement."
                                                 )
                                                 appState.transcribingId = null
                                             }
