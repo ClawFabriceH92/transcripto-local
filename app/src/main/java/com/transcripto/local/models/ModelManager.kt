@@ -67,14 +67,14 @@ class ModelManager(private val context: Context) {
      * Return the expected local file for the STT model.
      */
     fun getSttModelFile(profile: ModelProfile): File {
-        return File(modelsDir, profile.sttModel)
+        return File(modelsDir, profile.sttFile)
     }
 
     /**
      * Return the expected local file for the LLM model.
      */
     fun getLlmModelFile(profile: ModelProfile): File {
-        return File(modelsDir, profile.llmModel)
+        return File(modelsDir, profile.llmFile)
     }
 
     /**

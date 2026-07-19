@@ -25,9 +25,6 @@ data class ModelProfileInfo(
     val isActive: Boolean,
 )
 
-/** Base URL for model downloads (HuggingFace repo). */
-private const val HF_BASE = "https://huggingface.co/transcripto-local/models/resolve/main"
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(modifier: Modifier = Modifier) {
@@ -195,37 +192,54 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                     downloadProgress = 0f
                                     downloadStatus = "Pr\u00e9paration..."
 
-                                    // STT d'abord, puis LLM
-                                    val modelNames = listOf(
-                                        currentProfile.sttModel to currentProfile.sttSize,
-                                        currentProfile.llmModel to currentProfile.llmSize
+                                    // STT puis LLM avec leurs bons repos HuggingFace
+                                    data class ModelDownload(
+                                        val name: String,
+                                        val file: String,
+                                        val repo: String,
+                                        val sizeMb: Int,
                                     )
 
-                                    var totalDownloaded = 0L
-                                    val totalBytes = modelNames.sumOf { it.second.toLong() } * 1024L * 1024L
+                                    val downloads = listOf(
+                                        ModelDownload(
+                                            name = currentProfile.sttModel,
+                                            file = currentProfile.sttFile,
+                                            repo = currentProfile.sttRepo,
+                                            sizeMb = currentProfile.sttSize,
+                                        ),
+                                        ModelDownload(
+                                            name = currentProfile.llmModel,
+                                            file = currentProfile.llmFile,
+                                            repo = currentProfile.llmRepo,
+                                            sizeMb = currentProfile.llmSize,
+                                        ),
+                                    )
 
-                                    for ((modelName, _) in modelNames) {
-                                        downloadStatus = "T\u00e9l\u00e9chargement de $modelName..."
-                                        val url = "$HF_BASE/$modelName.bin"
+                                    val totalBytes = downloads.sumOf { it.sizeMb.toLong() } * 1024L * 1024L
+                                    var totalDownloaded = 0L
+
+                                    for (dl in downloads) {
+                                        downloadStatus = "${dl.name}..."
+                                        val url = "https://huggingface.co/${dl.repo}/resolve/main/${dl.file}"
 
                                         val result = withContext(Dispatchers.IO) {
                                             modelManager.downloadModel(
-                                                modelName = "$modelName.bin",
+                                                modelName = dl.file,
                                                 remoteUrl = url,
                                                 progress = { downloaded, total ->
                                                     val fileFraction = downloaded.toFloat() / total.toFloat()
                                                     downloadProgress = (totalDownloaded + fileFraction * totalBytes) / totalBytes
-                                                    downloadStatus = "$modelName : ${downloaded / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
+                                                    downloadStatus = "${dl.name} : ${downloaded / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
                                                 }
                                             )
                                         }
 
                                         if (result == null) {
-                                            downloadError = "\u00c9chec du t\u00e9l\u00e9chargement de $modelName"
+                                            downloadError = "Échec du téléchargement de ${dl.name}"
                                             isDownloading = false
                                             return@launch
                                         }
-                                        totalDownloaded += currentProfile.sttSize.toLong() * 1024L * 1024L
+                                        totalDownloaded += dl.sizeMb.toLong() * 1024L * 1024L
                                     }
 
                                     downloadProgress = 1f
