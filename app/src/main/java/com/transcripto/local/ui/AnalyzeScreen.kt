@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -19,13 +20,13 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(20.dp)
     ) {
         Text(
             text = "Analyse",
-            fontSize = 28.sp,
+            fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 12.dp)
         )
 
         TabRow(selectedTabIndex = selectedTab) {
@@ -33,12 +34,19 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(title) }
+                    text = {
+                        Text(
+                            title,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         val scrollState = rememberScrollState()
 
@@ -55,7 +63,7 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Bouton exporter
         Row(
@@ -63,7 +71,7 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.End
         ) {
             OutlinedButton(onClick = { /* exporter */ }) {
-                Text("Exporter")
+                Text("Exporter", fontSize = 13.sp)
             }
         }
     }
@@ -77,17 +85,17 @@ private fun SummarySection() {
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = "Résumé",
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+                fontSize = 16.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
                 text = "Sélectionnez une transcription pour générer le résumé.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
         }
     }
@@ -101,17 +109,17 @@ private fun KeyPointsSection() {
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = "Points clés",
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+                fontSize = 16.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
                 text = "Les points importants seront extraits automatiquement.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
         }
     }
@@ -125,17 +133,17 @@ private fun ActionsSection() {
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = "Actions à suivre",
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(bottom = 8.dp)
+                fontSize = 16.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
                 text = "Les actions (qui / quoi / échéance) seront listées ici.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
         }
     }
@@ -152,26 +160,27 @@ private fun QaSection() {
                 containerColor = MaterialTheme.colorScheme.surfaceVariant
             )
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Text(
                     text = "Poser une question",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    fontSize = 16.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
                 OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
-                    placeholder = { Text("Posez une question sur le contenu…") },
+                    placeholder = { Text("Posez une question sur le contenu…", fontSize = 13.sp) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
+                    textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { /* envoyer la question au LLM */ },
                     enabled = question.isNotBlank()
                 ) {
-                    Text("Questionner")
+                    Text("Questionner", fontSize = 13.sp)
                 }
             }
         }

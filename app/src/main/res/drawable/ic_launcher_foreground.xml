@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cercle micro -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0" />
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M54,24
+            C49.03,24 45,28.03 45,33v3
+            C45,40.97 49.03,45 54,45
+            S63,40.97 63,36v-3
+            C63,28.03 58.97,24 54,24z
+            M58,36c0,2.21 -1.79,4 -4,4
+            s-4,-1.79 -4,-4v-3
+            c0,-2.21 1.79,-4 4,-4
+            s4,1.79 4,4v3z" />
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M41.5,42.5
+            L39,45
+            C42,49 47.5,52 54,52
+            S66,49 69,45
+            L66.5,42.5
+            C64,45.5 59.5,48 54,48
+            S44,45.5 41.5,42.5z" />
+    <!-- Onde de son stylisée -->
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M36,46
+            C33,50 31,55 31,60
+            C31,65 33,70 36,74
+            L39,71
+            C37,68 35,64 35,60
+            C35,56 37,52 39,49Z" />
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M72,46
+            L69,49
+            C71,52 73,56 73,60
+            C73,64 71,68 69,71
+            L72,74
+            C75,70 77,65 77,60
+            C77,55 75,50 72,46Z" />
+    <!-- Points de son -->
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M28,60m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M80,60m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+</vector>
