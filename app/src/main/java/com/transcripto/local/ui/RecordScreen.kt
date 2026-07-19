@@ -3,6 +3,10 @@ package com.transcripto.local.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -15,7 +19,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.transcripto.local.data.AppLogger
 import com.transcripto.local.data.LocalAppState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,16 +35,21 @@ import java.util.Locale
 fun RecordScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val appState = LocalAppState.current
+    val scope = rememberCoroutineScope()
     var isRecording by remember { mutableStateOf(false) }
     var isPaused by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
     var soundLevel by remember { mutableFloatStateOf(0f) }
 
-    // Timer effect
+    // Référence à l'enregistrement en cours
+    var audioRecorder by remember { mutableStateOf<MediaRecorder?>(null) }
+    var outputFile by remember { mutableStateOf<File?>(null) }
+
+    // Timer
     LaunchedEffect(isRecording, isPaused) {
         if (isRecording && !isPaused) {
             while (true) {
-                kotlinx.coroutines.delay(1000)
+                delay(1000)
                 elapsedSeconds++
             }
         }
@@ -71,7 +87,6 @@ fun RecordScreen(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Durée
         Text(
             text = formatDuration(elapsedSeconds),
             fontSize = 48.sp,
@@ -81,7 +96,6 @@ fun RecordScreen(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Niveau sonore
         if (isRecording) {
             Canvas(modifier = Modifier.height(80.dp).fillMaxWidth()) {
                 val barCount = 40
@@ -98,21 +112,55 @@ fun RecordScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(24.dp))
         }
 
-        // Bouton enregistrer
         Button(
             onClick = {
-                val startRecord = !isRecording
-                isRecording = startRecord
-                if (!startRecord) {
-                    // On arr\u00eate \u2192 on ajoute aux enregistrements
-                    val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.FRENCH)
-                    val timeFormat = SimpleDateFormat("HH:mm", Locale.FRENCH)
-                    val now = Date()
-                    appState.addRecording(
-                        date = dateFormat.format(now),
-                        time = timeFormat.format(now),
-                        duration = formatDuration(elapsedSeconds),
-                    )
+                if (!isRecording) {
+                    // Démarrer l'enregistrement
+                    try {
+                        val dir = File(context.filesDir, "recordings")
+                        dir.mkdirs()
+                        val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.FRENCH).format(Date())
+                        val file = File(dir, "rec_$ts.wav")
+                        outputFile = file
+
+                        val recorder = MediaRecorder().apply {
+                            setAudioSource(MediaRecorder.AudioSource.MIC)
+                            setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+                            setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+                            setOutputFile(file.absolutePath)
+                            prepare()
+                            start()
+                        }
+                        audioRecorder = recorder
+                        isRecording = true
+                        AppLogger.i("Enregistrement démarré : ${file.absolutePath}")
+                    } catch (e: Exception) {
+                        AppLogger.e("Erreur démarrage enregistrement : ${e.message}")
+                    }
+                } else {
+                    // Arrêter l'enregistrement
+                    try {
+                        audioRecorder?.apply {
+                            stop()
+                            release()
+                        }
+                        audioRecorder = null
+                        isRecording = false
+
+                        val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.FRENCH)
+                        val timeFormat = SimpleDateFormat("HH:mm", Locale.FRENCH)
+                        val now = Date()
+                        appState.addRecording(
+                            date = dateFormat.format(now),
+                            time = timeFormat.format(now),
+                            duration = formatDuration(elapsedSeconds),
+                            audioPath = outputFile?.absolutePath ?: "",
+                        )
+                        AppLogger.i("Enregistrement termin\u00e9 : ${outputFile?.absolutePath}")
+                        appState.onNavigateToScreen(1)  // bascule vers Transcriptions
+                    } catch (e: Exception) {
+                        AppLogger.e("Erreur arr\u00eat enregistrement : ${e.message}")
+                    }
                     isPaused = false
                     elapsedSeconds = 0
                 }

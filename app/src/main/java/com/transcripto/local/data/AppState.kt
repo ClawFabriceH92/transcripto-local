@@ -1,6 +1,5 @@
 package com.transcripto.local.data
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -9,8 +8,6 @@ import androidx.compose.runtime.setValue
 
 /**
  * State partagé entre tous les écrans.
- * Utilisé via [LocalAppState] pour que RecordScreen / TranscribeScreen /
- * AnalyzeScreen partagent les mêmes enregistrements.
  */
 class AppState {
     var recordings = mutableStateListOf<Recording>()
@@ -21,7 +18,10 @@ class AppState {
 
     var selectedRecordingId by mutableStateOf<Long?>(null)
 
-    /** Incrémenté à chaque nouvel enregistrement. */
+    /** Navigation : permet à RecordScreen de basculer vers Transcriptions. */
+    var selectedScreen by mutableStateOf(0)
+    var onNavigateToScreen: (Int) -> Unit = {}
+
     private var nextId = 1L
 
     fun addRecording(date: String, time: String, duration: String, audioPath: String = "") {
@@ -63,5 +63,4 @@ class AppState {
     }
 }
 
-/** CompositionLocal pour partager l'AppState dans tout l'arbre Compose. */
 val LocalAppState = compositionLocalOf { AppState() }

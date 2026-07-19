@@ -1,5 +1,7 @@
 package com.transcripto.local.stt
 
+import android.util.Log
+import com.transcripto.local.data.AppLogger
 import java.io.File
 
 /**
@@ -31,46 +33,23 @@ sealed class SttResult {
 
 /**
  * Interface for local Speech-To-Text engine.
- *
- * The concrete implementation bridges to whisper.cpp via JNI.
  */
 interface SttEngine {
-
-    /**
-     * Transcribe the given audio file and return segments with timing.
-     *
-     * @param audioFile PCM/WAV audio file sampled at 16 kHz mono.
-     * @param language  ISO-639-1 language code (e.g. "fr", "en", "auto").
-     * @param options   Optional engine-specific flags.
-     */
     fun transcribe(
         audioFile: File,
         language: String = "auto",
         options: Map<String, Any> = emptyMap(),
     ): SttResult
 
-    /**
-     * Load (or pre-load) the model into memory.
-     * @param modelPath Absolute path to the whisper.cpp GGML model file.
-     */
     fun loadModel(modelPath: String): Result<Unit>
-
-    /**
-     * Unload the current model from memory to free RAM.
-     */
     fun unloadModel(): Result<Unit>
-
-    /**
-     * Whether a model is currently loaded and ready.
-     */
     val isLoaded: Boolean
 }
 
 /**
- * Placeholder implementation that bridges to whisper.cpp through JNI.
+ * Implementation bridging to whisper.cpp through JNI.
  *
- * Native library expected: libwhisper_jni.so
- * JNI class: com.transcripto.local.stt.WhisperNative
+ * Native library expected: libwhisper.so
  */
 class WhisperSttEngine : SttEngine {
 
@@ -85,26 +64,32 @@ class WhisperSttEngine : SttEngine {
         options: Map<String, Any>,
     ): SttResult {
         if (!isLoaded) {
-            return SttResult.Error("Model not loaded. Call loadModel() first.")
+            return SttResult.Error("Mod\u00e8le non charg\u00e9. Appelez loadModel() d'abord.")
         }
         if (!audioFile.exists()) {
-            return SttResult.Error("Audio file not found: ${audioFile.absolutePath}")
+            return SttResult.Error("Fichier audio introuvable : ${audioFile.absolutePath}")
         }
         return try {
+            AppLogger.i("Whisper: d\u00e9but transcription de ${audioFile.name}")
             val resultJson = nativeTranscribe(nativeHandle, audioFile.absolutePath, language)
+            AppLogger.i("Whisper: transcription termin\u00e9e")
             parseTranscriptionResult(resultJson)
         } catch (e: Exception) {
+            AppLogger.e("Whisper: erreur transcription : ${e.message}")
             SttResult.Error("Transcription failed: ${e.message}", e)
         }
     }
 
     override fun loadModel(modelPath: String): Result<Unit> {
         return try {
+            AppLogger.i("Whisper: chargement du mod\u00e8le $modelPath")
             nativeHandle = nativeLoadModel(modelPath)
             isLoaded = true
+            AppLogger.i("Whisper: mod\u00e8le charg\u00e9 (handle=$nativeHandle)")
             Result.success(Unit)
         } catch (e: Exception) {
             isLoaded = false
+            AppLogger.e("Whisper: \u00e9chec chargement mod\u00e8le : ${e.message}")
             Result.failure(IllegalStateException("Failed to load model: ${e.message}", e))
         }
     }
@@ -116,40 +101,93 @@ class WhisperSttEngine : SttEngine {
                 nativeHandle = 0L
             }
             isLoaded = false
+            AppLogger.i("Whisper: mod\u00e8le d\u00e9charg\u00e9")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(IllegalStateException("Failed to unload model: ${e.message}", e))
         }
     }
 
-    // ---- JNI stubs (native implementation in libwhisper_jni.so) ----
-
+    // ---- JNI stubs (native in libwhisper.so) ----
     private external fun nativeLoadModel(modelPath: String): Long
     private external fun nativeTranscribe(handle: Long, audioPath: String, language: String): String
     private external fun nativeUnloadModel(handle: Long)
 
-    // ---- JSON parsing (simple — consider using org.json or kotlinx.serialization) ----
-
+    // ---- JSON parsing ----
     private fun parseTranscriptionResult(json: String): SttResult {
-        // TODO: parse JSON response from native layer.
-        // Expected format:
-        // {
-        //   "full_text": "...",
-        //   "language": "fr",
-        //   "duration_ms": 12345,
-        //   "segments": [
-        //     {"start_ms": 0, "end_ms": 1000, "text": "Bonjour"}
-        //   ]
-        // }
-        return SttResult.Error("Transcription result parsing not yet implemented.")
+        return try {
+            // Parser simple sans dépendance
+            val fullText = extractJsonString(json, "full_text") ?: ""
+            val language = extractJsonString(json, "language") ?: "fr"
+
+            val segments = mutableListOf<SttSegment>()
+            val segStart = json.indexOf("\"segments\"")
+            if (segStart >= 0) {
+                val arrStart = json.indexOf('[', segStart)
+                val arrEnd = json.lastIndexOf(']')
+                if (arrStart >= 0 && arrEnd > arrStart) {
+                    val arrContent = json.substring(arrStart + 1, arrEnd)
+                    var pos = 0
+                    while (true) {
+                        val objStart = arrContent.indexOf('{', pos)
+                        if (objStart < 0) break
+                        val objEnd = arrContent.indexOf('}', objStart)
+                        if (objEnd < 0) break
+                        val obj = arrContent.substring(objStart, objEnd + 1)
+                        val sMs = extractJsonLong(obj, "start_ms") ?: 0L
+                        val eMs = extractJsonLong(obj, "end_ms") ?: 0L
+                        val txt = extractJsonString(obj, "text") ?: ""
+                        segments.add(SttSegment(sMs, eMs, txt))
+                        pos = objEnd + 1
+                    }
+                }
+            }
+
+            SttResult.Success(
+                TranscriptionResult(
+                    fullText = fullText,
+                    segments = segments,
+                    language = language,
+                )
+            )
+        } catch (e: Exception) {
+            AppLogger.e("Whisper: erreur parsing JSON : ${e.message}")
+            SttResult.Error("Erreur de parsing: ${e.message}", e)
+        }
+    }
+
+    private fun extractJsonString(json: String, key: String): String? {
+        val search = "\"$key\""
+        val idx = json.indexOf(search)
+        if (idx < 0) return null
+        val colon = json.indexOf(':', idx + search.length)
+        if (colon < 0) return null
+        val quoteStart = json.indexOf('"', colon + 1)
+        if (quoteStart < 0) return null
+        val quoteEnd = json.indexOf('"', quoteStart + 1)
+        if (quoteEnd < 0) return null
+        return json.substring(quoteStart + 1, quoteEnd)
+    }
+
+    private fun extractJsonLong(json: String, key: String): Long? {
+        val search = "\"$key\""
+        val idx = json.indexOf(search)
+        if (idx < 0) return null
+        val colon = json.indexOf(':', idx + search.length)
+        if (colon < 0) return null
+        val end = json.indexOfAny(charArrayOf(',', '}', ']'), colon + 1)
+        if (end < 0) return null
+        val numStr = json.substring(colon + 1, end).trim()
+        return numStr.toLongOrNull()
     }
 
     companion object {
         init {
             try {
-                System.loadLibrary("whisper_jni")
+                System.loadLibrary("whisper")
+                AppLogger.i("Whisper: libwhisper.so charg\u00e9e avec succ\u00e8s")
             } catch (e: UnsatisfiedLinkError) {
-                // Native library not yet bundled — operations will return errors
+                AppLogger.e("Whisper: impossible de charger libwhisper.so : ${e.message}")
             }
         }
     }

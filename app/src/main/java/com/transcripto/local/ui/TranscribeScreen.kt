@@ -27,8 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.transcripto.local.data.AppLogger
 import com.transcripto.local.data.LocalAppState
-import kotlinx.coroutines.delay
+import com.transcripto.local.models.ModelManager
+import com.transcripto.local.models.ModelProfiles
+import com.transcripto.local.stt.SttResult
+import com.transcripto.local.stt.WhisperSttEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +43,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
     val appState = LocalAppState.current
     val scope = rememberCoroutineScope()
     var expandedId by remember { mutableStateOf<Long?>(null) }
+    val modelManager = remember { ModelManager(context) }
 
     val recordings = appState.recordings.toList()
 
@@ -70,7 +77,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            // Ligne principale
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -95,7 +101,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                     )
                                 }
 
-                                // Barre progression ou bouton Transcrire ou ic\u00f4ne OK
                                 if (appState.transcribingId == item.id) {
                                     Column(
                                         modifier = Modifier
@@ -117,21 +122,69 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                 } else if (!item.isTranscribed) {
                                     FilledTonalButton(
                                         onClick = {
-                                            AppLogger.i("Transcription lancée pour l'enregistrement #${item.id}")
+                                            AppLogger.i("Transcription lanc\u00e9e #${item.id}")
+
+                                            val audioPath = item.audioPath
+                                            if (audioPath.isBlank()) {
+                                                AppLogger.w("Pas de fichier audio pour #${item.id}")
+                                                return@FilledTonalButton
+                                            }
+
+                                            val audioFile = File(audioPath)
+                                            if (!audioFile.exists()) {
+                                                AppLogger.e("Fichier audio introuvable : $audioPath")
+                                                return@FilledTonalButton
+                                            }
+
                                             appState.transcribingId = item.id
                                             appState.transcribeProgress = 0f
+
                                             scope.launch {
-                                                // Simulation tant que Whisper n'est pas branch\u00e9
-                                                for (i in 1..100) {
-                                                    delay(50)
-                                                    appState.transcribeProgress = i / 100f
+                                                // 1. Charger Whisper
+                                                val profile = ModelProfiles.ULTRA_LIGHT.profile
+                                                val sttModel = modelManager.getSttModelFile(profile)
+                                                val whisper = WhisperSttEngine()
+
+                                                if (!whisper.isLoaded) {
+                                                    val loadResult = withContext(Dispatchers.IO) {
+                                                        whisper.loadModel(sttModel.absolutePath)
+                                                    }
+                                                    if (loadResult.isFailure) {
+                                                        AppLogger.e("Whisper: \u00e9chec chargement")
+                                                        appState.transcribingId = null
+                                                        return@launch
+                                                    }
                                                 }
-                                                appState.setTranscription(
-                                                    id = item.id,
-                                                    text = "Alors, l'objectif de cette reunion etait de faire le point sur l'avancement du projet. On a aborde plusieurs points importants. D'abord, la partie technique avec la mise en place de l'infrastructure, ensuite les delais qui sont un peu serres, et enfin les prochaines etapes a prevoir.\n\nPour la partie finance, il faut prevoir un budget supplementaire pour les outils. Je pense qu'on peut demander une rallonge aupres de la direction. C'est un projet prioritaire donc ca devrait passer sans trop de difficultes.\n\nVoila, c'etait le resume de l'enregistrement."
-                                                )
+
+                                                // 2. Lancer la transcription
+                                                val result = withContext(Dispatchers.IO) {
+                                                    whisper.transcribe(audioFile, "fr")
+                                                }
+
+                                                when (result) {
+                                                    is SttResult.Success -> {
+                                                        AppLogger.i("Transcription r\u00e9ussie : ${result.transcription.fullText.take(100)}...")
+                                                        appState.setTranscription(
+                                                            id = item.id,
+                                                            text = result.transcription.fullText
+                                                        )
+                                                    }
+                                                    is SttResult.Error -> {
+                                                        AppLogger.e("Transcription \u00e9chou\u00e9e : ${result.message}")
+                                                        appState.setTranscription(
+                                                            id = item.id,
+                                                            text = "Erreur de transcription : ${result.message}"
+                                                        )
+                                                    }
+                                                }
+
+                                                // 3. Lib\u00e9rer la m\u00e9moire
+                                                withContext(Dispatchers.IO) {
+                                                    whisper.unloadModel()
+                                                }
                                                 appState.transcribingId = null
-                                                AppLogger.i("Transcription terminée pour l'enregistrement #${item.id}")
+                                                appState.transcribeProgress = 1f
+                                                AppLogger.i("Transcription termin\u00e9e #${item.id}")
                                             }
                                         },
                                         modifier = Modifier.padding(end = 8.dp),
@@ -172,7 +225,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                 }
                             }
 
-                            // Texte transcrit d\u00e9pliable
                             AnimatedVisibility(visible = expandedId == item.id) {
                                 HorizontalDivider()
                                 Column(
@@ -180,7 +232,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 12.dp)
                                 ) {
-                                    // Date + heure + dur\u00e9e en haut
                                     Text(
                                         text = "${item.date} \u00e0 ${item.time} \u2014 ${item.duration}",
                                         fontSize = 12.sp,
@@ -189,12 +240,9 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         modifier = Modifier.padding(bottom = 8.dp)
                                     )
 
-                                    // Le texte transcrit (s\u00e9lectionnable)
                                     SelectionContainer {
                                         Text(
-                                            text = item.fullText.ifBlank {
-                                                "Transcription en attente..."
-                                            },
+                                            text = item.fullText.ifBlank { "Transcription en attente..." },
                                             fontSize = 14.sp,
                                             lineHeight = 20.sp,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -203,12 +251,10 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
 
                                     Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Boutons d'action
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        // Copier
                                         OutlinedButton(
                                             onClick = {
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -218,16 +264,11 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                             },
                                             modifier = Modifier.height(36.dp)
                                         ) {
-                                            Icon(
-                                                Icons.Default.ContentCopy,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                            Icon(Icons.Default.ContentCopy, null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Copier", fontSize = 12.sp)
                                         }
 
-                                        // Exporter
                                         OutlinedButton(
                                             onClick = {
                                                 val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -239,16 +280,11 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                             },
                                             modifier = Modifier.height(36.dp)
                                         ) {
-                                            Icon(
-                                                Icons.Default.Share,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                            Icon(Icons.Default.Share, null, modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Exporter", fontSize = 12.sp)
                                         }
 
-                                        // Fermer
                                         TextButton(
                                             onClick = { expandedId = null },
                                             modifier = Modifier.height(36.dp)

@@ -1,19 +1,14 @@
 package com.transcripto.local.llm
 
+import com.transcripto.local.data.AppLogger
+
 /**
  * Types of analysis prompts the LLM can process.
  */
 enum class PromptType {
-    /** Generate a concise summary of the transcription. */
     SUMMARY,
-
-    /** Extract key points / bullet items. */
     KEY_POINTS,
-
-    /** Identify action items and next steps. */
     ACTIONS,
-
-    /** Free-form question / response about the content. */
     FREE_QUERY,
 }
 
@@ -29,45 +24,20 @@ sealed class LlmResult {
  * Configuration for an LLM query.
  */
 data class LlmQuery(
-    /** The transcription text (context). */
     val transcription: String,
-    /** Type of prompt to build. */
     val promptType: PromptType,
-    /** Optional free-form question (used with FREE_QUERY). */
     val freeQuery: String = "",
-    /** System prompt overrides (optional). */
     val systemPrompt: String? = null,
 )
 
 /**
  * Interface for local LLM engine.
- *
- * The concrete implementation bridges to llama.cpp via JNI.
  */
 interface LlmEngine {
-
-    /**
-     * Run an analysis on the given transcription.
-     *
-     * @param query The transcription and prompt configuration.
-     * @return LlmResult with the generated text or an error.
-     */
     fun analyze(query: LlmQuery): LlmResult
-
-    /**
-     * Load the GGUF model from the given path.
-     */
     fun loadModel(modelPath: String): Result<Unit>
-
-    /**
-     * Unload the current model from memory.
-     */
     fun unloadModel(): Result<Unit>
-
-    /** Whether a model is loaded and ready. */
     val isLoaded: Boolean
-
-    /** Current inference parameters. */
     var parameters: InferenceParams
 }
 
@@ -83,10 +53,9 @@ data class InferenceParams(
 )
 
 /**
- * Placeholder implementation bridging to llama.cpp via JNI.
+ * Implementation bridging to llama.cpp through JNI.
  *
- * Native library expected: libllama_jni.so
- * JNI class: com.transcripto.local.llm.LlamaNative
+ * Native library expected: libllama.so
  */
 class LlamaLlmEngine : LlmEngine {
 
@@ -99,32 +68,33 @@ class LlamaLlmEngine : LlmEngine {
 
     override fun analyze(query: LlmQuery): LlmResult {
         if (!isLoaded) {
-            return LlmResult.Error("Model not loaded. Call loadModel() first.")
+            return LlmResult.Error("Mod\u00e8le non charg\u00e9. Appelez loadModel() d'abord.")
         }
         return try {
+            AppLogger.i("LLM: d\u00e9but analyse (${query.promptType})")
             val prompt = buildPrompt(query)
-            val resultJson = nativeInference(
+            val resultJson = nativeGenerate(
                 handle = nativeHandle,
                 prompt = prompt,
-                maxTokens = parameters.maxTokens,
-                temperature = parameters.temperature,
-                topK = parameters.topK,
-                topP = parameters.topP,
-                repeatPenalty = parameters.repeatPenalty,
             )
-            parseInferenceResult(resultJson)
+            AppLogger.i("LLM: analyse termin\u00e9e")
+            LlmResult.Success(resultJson)
         } catch (e: Exception) {
+            AppLogger.e("LLM: erreur : ${e.message}")
             LlmResult.Error("Inference failed: ${e.message}", e)
         }
     }
 
     override fun loadModel(modelPath: String): Result<Unit> {
         return try {
+            AppLogger.i("LLM: chargement du mod\u00e8le $modelPath")
             nativeHandle = nativeLoadModel(modelPath)
             isLoaded = true
+            AppLogger.i("LLM: mod\u00e8le charg\u00e9 (handle=$nativeHandle)")
             Result.success(Unit)
         } catch (e: Exception) {
             isLoaded = false
+            AppLogger.e("LLM: \u00e9chec chargement : ${e.message}")
             Result.failure(IllegalStateException("Failed to load model: ${e.message}", e))
         }
     }
@@ -136,6 +106,7 @@ class LlamaLlmEngine : LlmEngine {
                 nativeHandle = 0L
             }
             isLoaded = false
+            AppLogger.i("LLM: mod\u00e8le d\u00e9charg\u00e9")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(IllegalStateException("Failed to unload model: ${e.message}", e))
@@ -150,61 +121,33 @@ class LlamaLlmEngine : LlmEngine {
             PromptType.FREE_QUERY -> buildFreeQueryPrompt(query.transcription, query.freeQuery)
             else -> "${system.trimEnd()}\n\nTranscription :\n${query.transcription}"
         }
-        // ChatML-style template (adjust to match the model's expected format)
+        // ChatML-style template
         return "<|im_start|>system\n$system<|im_end|>\n<|im_start|>user\n$user<|im_end|>\n<|im_start|>assistant\n"
     }
 
     private fun defaultSystemPrompt(type: PromptType): String = when (type) {
-        PromptType.SUMMARY -> """
-            Tu es un assistant spécialisé dans le résumé de transcriptions audio.
-            Produis un résumé concis et structuré en français.
-            Ne fais pas référence à la transcription elle-même, réponds directement.
-        """.trimIndent()
-        PromptType.KEY_POINTS -> """
-            Tu es un assistant qui extrait les points clés d'une transcription.
-            Produis une liste à puces des idées principales en français.
-        """.trimIndent()
-        PromptType.ACTIONS -> """
-            Tu es un assistant qui identifie les actions et prochaines étapes.
-            Liste chaque action avec un responsable implicite si identifiable.
-        """.trimIndent()
-        PromptType.FREE_QUERY -> """
-            Tu es un assistant utile. Réponds en français à la question posée
-            en te basant sur la transcription fournie.
-        """.trimIndent()
+        PromptType.SUMMARY -> """Tu es un assistant spécialisé dans le résumé de transcriptions audio. Produis un résumé concis et structuré en français. Ne fais pas référence à la transcription elle-même, réponds directement."""
+        PromptType.KEY_POINTS -> """Tu es un assistant qui extrait les points clés d'une transcription. Produis une liste à puces des idées principales en français."""
+        PromptType.ACTIONS -> """Tu es un assistant qui identifie les actions et prochaines étapes. Liste chaque action avec un responsable implicite si identifiable."""
+        PromptType.FREE_QUERY -> """Tu es un assistant utile. Réponds en français à la question posée en te basant sur la transcription fournie."""
     }
 
     private fun buildFreeQueryPrompt(transcription: String, query: String): String {
         return "Transcription :\n$transcription\n\nQuestion : $query"
     }
 
-    // ---- JNI stubs (native implementation in libllama_jni.so) ----
-
+    // ---- JNI stubs (native in libllama.so) ----
     private external fun nativeLoadModel(modelPath: String): Long
-    private external fun nativeInference(
-        handle: Long,
-        prompt: String,
-        maxTokens: Int,
-        temperature: Float,
-        topK: Int,
-        topP: Float,
-        repeatPenalty: Float,
-    ): String
+    private external fun nativeGenerate(handle: Long, prompt: String): String
     private external fun nativeUnloadModel(handle: Long)
-
-    // ---- JSON result parsing ----
-
-    private fun parseInferenceResult(json: String): LlmResult {
-        // TODO: parse {"text": "...", "tokens_used": N, "stop_reason": "..."}
-        return LlmResult.Error("Inference result parsing not yet implemented.")
-    }
 
     companion object {
         init {
             try {
-                System.loadLibrary("llama_jni")
+                System.loadLibrary("llama")
+                AppLogger.i("LLM: libllama.so charg\u00e9e avec succ\u00e8s")
             } catch (e: UnsatisfiedLinkError) {
-                // Native library not yet bundled
+                AppLogger.e("LLM: impossible de charger libllama.so : ${e.message}")
             }
         }
     }

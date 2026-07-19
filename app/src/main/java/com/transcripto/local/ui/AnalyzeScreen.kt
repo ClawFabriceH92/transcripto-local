@@ -10,16 +10,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.transcripto.local.data.AppLogger
 import com.transcripto.local.data.LocalAppState
-import com.transcripto.local.data.Recording
-import kotlinx.coroutines.delay
+import com.transcripto.local.llm.LlamaLlmEngine
+import com.transcripto.local.llm.LlmQuery
+import com.transcripto.local.llm.LlmResult
+import com.transcripto.local.llm.PromptType
+import com.transcripto.local.models.ModelManager
+import com.transcripto.local.models.ModelProfiles
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyzeScreen(modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val appState = LocalAppState.current
     val scope = rememberCoroutineScope()
+    val modelManager = remember { ModelManager(context) }
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("R\u00e9sum\u00e9", "Points cl\u00e9s", "Actions", "Question")
     var analyzing by remember { mutableStateOf(false) }
@@ -54,7 +63,6 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             return
         }
 
-        // Dropdown de s\u00e9lection
         var menuExpanded by remember { mutableStateOf(false) }
 
         ExposedDropdownMenuBox(
@@ -105,20 +113,70 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
 
         val recording = selectedRecording ?: return
 
-        // Bouton g\u00e9n\u00e9rer l'analyse
+        // Bouton g\u00e9n\u00e9rer l'analyse avec le vrai LLM
         if (recording.summary.isBlank() && !analyzing) {
             Button(
                 onClick = {
                     analyzing = true
                     scope.launch {
-                        // Simule l'appel LLM
-                        delay(1500)
-                        appState.setAnalysis(
-                            id = recording.id,
-                            summary = "R\u00e9sum\u00e9 de l'enregistrement du ${recording.date}. Contenu: ${recording.fullText.take(100)}...",
-                            keyPoints = "Point 1: Premier sujet abord\u00e9\nPoint 2: Deuxi\u00e8me point important\nPoint 3: Conclusion",
-                            actions = "Action 1: Suivre la proc\u00e9dure\nAction 2: Programmez une r\u00e9union de suivi",
-                        )
+                        AppLogger.i("Analyse LLM lanc\u00e9e #${recording.id}")
+
+                        val profile = ModelProfiles.ULTRA_LIGHT.profile
+                        val llmModel = modelManager.getLlmModelFile(profile)
+
+                        if (!llmModel.exists()) {
+                            AppLogger.e("Mod\u00e8le LLM introuvable : ${llmModel.absolutePath}")
+                            analyzing = false
+                            return@launch
+                        }
+
+                        val llm = LlamaLlmEngine()
+
+                        // Charger le mod\u00e8le
+                        val loadResult = withContext(Dispatchers.IO) {
+                            llm.loadModel(llmModel.absolutePath)
+                        }
+                        if (loadResult.isFailure) {
+                            AppLogger.e("LLM: \u00e9chec chargement mod\u00e8le")
+                            analyzing = false
+                            return@launch
+                        }
+
+                        AppLogger.i("LLM: mod\u00e8le charg\u00e9, lancement des analyses")
+
+                        // R\u00e9sum\u00e9
+                        val summaryResult = withContext(Dispatchers.IO) {
+                            llm.analyze(LlmQuery(recording.fullText, PromptType.SUMMARY))
+                        }
+                        val summary = when (summaryResult) {
+                            is LlmResult.Success -> summaryResult.text
+                            else -> "Erreur: ${(summaryResult as? LlmResult.Error)?.message}"
+                        }
+
+                        // Points cl\u00e9s
+                        val kpResult = withContext(Dispatchers.IO) {
+                            llm.analyze(LlmQuery(recording.fullText, PromptType.KEY_POINTS))
+                        }
+                        val keyPoints = when (kpResult) {
+                            is LlmResult.Success -> kpResult.text
+                            else -> "Erreur: ${(kpResult as? LlmResult.Error)?.message}"
+                        }
+
+                        // Actions
+                        val actionsResult = withContext(Dispatchers.IO) {
+                            llm.analyze(LlmQuery(recording.fullText, PromptType.ACTIONS))
+                        }
+                        val actions = when (actionsResult) {
+                            is LlmResult.Success -> actionsResult.text
+                            else -> "Erreur: ${(actionsResult as? LlmResult.Error)?.message}"
+                        }
+
+                        appState.setAnalysis(recording.id, summary, keyPoints, actions)
+
+                        // Lib\u00e9rer la m\u00e9moire
+                        withContext(Dispatchers.IO) { llm.unloadModel() }
+
+                        AppLogger.i("Analyse LLM termin\u00e9e #${recording.id}")
                         analyzing = false
                     }
                 },
@@ -138,7 +196,6 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Onglets
         TabRow(selectedTabIndex = selectedTab) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -166,10 +223,10 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                 .verticalScroll(scrollState)
         ) {
             when (selectedTab) {
-                0 -> AnalysisCard(title = "R\u00e9sum\u00e9", text = recording.summary.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour obtenir le r\u00e9sum\u00e9." })
-                1 -> AnalysisCard(title = "Points cl\u00e9s", text = recording.keyPoints.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour extraire les points cl\u00e9s." })
-                2 -> AnalysisCard(title = "Actions", text = recording.actions.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour lister les actions." })
-                3 -> QaSection(fullText = recording.fullText)
+                0 -> AnalysisCard(title = "R\u00e9sum\u00e9", text = recording.summary.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
+                1 -> AnalysisCard(title = "Points cl\u00e9s", text = recording.keyPoints.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
+                2 -> AnalysisCard(title = "Actions", text = recording.actions.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse'." })
+                3 -> QaSection(fullText = recording.fullText, llmEngine = LlamaLlmEngine(), llmModel = modelManager.getLlmModelFile(ModelProfiles.ULTRA_LIGHT.profile))
             }
         }
 
@@ -211,8 +268,11 @@ private fun AnalysisCard(title: String, text: String) {
 }
 
 @Composable
-private fun QaSection(fullText: String) {
+private fun QaSection(fullText: String, llmEngine: com.transcripto.local.llm.LlamaLlmEngine, llmModel: java.io.File) {
     var question by remember { mutableStateOf("") }
+    var answer by remember { mutableStateOf<String?>(null) }
+    var answering by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column {
         Card(
@@ -245,10 +305,45 @@ private fun QaSection(fullText: String) {
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
-                        onClick = { /* envoyer la question au LLM */ },
-                        enabled = question.isNotBlank()
+                        onClick = {
+                            answering = true
+                            answer = null
+                            scope.launch {
+                                val loadResult = withContext(Dispatchers.IO) { llmEngine.loadModel(llmModel.absolutePath) }
+                                if (loadResult.isSuccess) {
+                                    val result = withContext(Dispatchers.IO) {
+                                        llmEngine.analyze(LlmQuery(fullText, PromptType.FREE_QUERY, freeQuery = question))
+                                    }
+                                    answer = when (result) {
+                                        is com.transcripto.local.llm.LlmResult.Success -> result.text
+                                        else -> "Erreur: ${(result as? com.transcripto.local.llm.LlmResult.Error)?.message}"
+                                    }
+                                    withContext(Dispatchers.IO) { llmEngine.unloadModel() }
+                                } else {
+                                    answer = "Erreur de chargement du mod\u00e8le"
+                                }
+                                answering = false
+                            }
+                        },
+                        enabled = question.isNotBlank() && !answering
                     ) {
                         Text("Questionner", fontSize = 13.sp)
+                    }
+
+                    if (answering) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
+                    if (answer != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(
+                                text = answer!!,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }
