@@ -97,41 +97,65 @@ class ModelManager(private val context: Context) {
         }
 
         return try {
-            val url = URL(remoteUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.instanceFollowRedirects = true
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 120_000
-            connection.connect()
+            var currentUrl = remoteUrl
+            var redirectCount = 0
+            val maxRedirects = 5
 
-            val responseCode = connection.responseCode
-            Log.d(tag, "HTTP $responseCode for $remoteUrl")
-            if (responseCode != 200 && responseCode != 206) {
-                Log.e(tag, "HTTP $responseCode for $remoteUrl")
+            while (redirectCount < maxRedirects) {
+                val url = URL(currentUrl)
+                val connection = url.openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false  // on gère nous-mêmes
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 120_000
+                connection.setRequestProperty("User-Agent", "TranscriptoLocal/0.1.0 Android")
+                connection.connect()
+
+                val responseCode = connection.responseCode
+                Log.d(tag, "HTTP $responseCode -> ${url.host}${url.path}")
+
+                if (responseCode == 302 || responseCode == 301 || responseCode == 307 || responseCode == 308) {
+                    val location = connection.getHeaderField("Location")
+                    Log.d(tag, "Redirect to: $location")
+                    connection.disconnect()
+                    if (location.isNullOrBlank()) return null
+                    currentUrl = location
+                    redirectCount++
+                    continue
+                }
+
+                if (responseCode == 200 || responseCode == 206) {
+                    val totalBytes = connection.contentLength.let { if (it <= 0) -1L else it.toLong() }
+                    val inputStream: InputStream = connection.inputStream
+                    val outputStream = FileOutputStream(outputFile)
+
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead: Long = 0L
+                    var lastProgressTime = 0L
+
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        if (totalBytes > 0) {
+                            progress?.invoke(totalRead, totalBytes)
+                        }
+                    }
+
+                    outputStream.close()
+                    inputStream.close()
+                    connection.disconnect()
+
+                    Log.d(tag, "Downloaded model $modelName ($totalRead bytes)")
+                    return outputFile
+                }
+
+                Log.e(tag, "Unexpected HTTP $responseCode for $currentUrl")
                 connection.disconnect()
                 return null
             }
 
-            val totalBytes = connection.contentLength.toLong()
-            val inputStream: InputStream = connection.inputStream
-            val outputStream = FileOutputStream(outputFile)
-
-            val buffer = ByteArray(8192)
-            var bytesRead: Int
-            var totalRead: Long = 0L
-
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                outputStream.write(buffer, 0, bytesRead)
-                totalRead += bytesRead
-                progress?.invoke(totalRead, totalBytes)
-            }
-
-            outputStream.close()
-            inputStream.close()
-            connection.disconnect()
-
-            Log.d(tag, "Downloaded model $modelName ($totalRead bytes)")
-            outputFile
+            Log.e(tag, "Too many redirects for $modelName")
+            null
         } catch (e: Exception) {
             Log.e(tag, "Failed to download model $modelName", e)
             outputFile.delete()
