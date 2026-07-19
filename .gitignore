@@ -1,0 +1,26 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+*.ap_
+*.hprof
+
+# Modèles téléchargés (à la racine seulement)
+/models/
+/recordings/
+
+# Native libs (build output)
+app/src/main/jniLibs/
+
+# Fichiers utilisateur
+*.bin
+*.gguf
+*.wav
+*.mp3
