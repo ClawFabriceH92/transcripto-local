@@ -3,31 +3,26 @@ package com.transcripto.local.models
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import android.os.StatFs
-import android.os.storage.StorageManager
 import android.util.Log
-import androidx.annotation.RequiresApi
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Manages model discovery, download, caching, and lifecycle.
+ * Manages model discovery, extraction from APK assets, caching, and lifecycle.
  *
- * Uses [ActivityManager.MemoryInfo] to detect available RAM and selects
- * the best-matching [ModelProfiles] entry.
+ * Models are bundled in the APK under assets/models/ and extracted
+ * to internal storage on first run.
  */
 class ModelManager(private val context: Context) {
 
     private val tag = "ModelManager"
 
-    /** Directory where downloaded models are stored. */
-    private val modelsDir: File
+    /** Directory where extracted models are stored. */
+    val modelsDir: File
         get() = File(context.filesDir, "models").also { it.mkdirs() }
 
     /**
@@ -38,18 +33,14 @@ class ModelManager(private val context: Context) {
         val memInfo = ActivityManager.MemoryInfo()
         am.getMemoryInfo(memInfo)
 
-        // Use totalMem as the best heuristic for capacity; fall back to
-        // memClass (the per-app limit) on older API levels.
         val totalMemMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
             memInfo.totalMem / (1024L * 1024L)
         } else {
-            // Approximate: memClass in MB is already the per-app limit
             am.memoryClass.toLong()
         }
 
         Log.d(tag, "Detected ~${totalMemMb}MB available RAM")
 
-        // Pick the first profile whose ramMin the device satisfies
         return ModelProfiles.entries
             .firstOrNull { it.profile.fits(totalMemMb.toInt()) }
             ?.profile
@@ -57,7 +48,7 @@ class ModelManager(private val context: Context) {
     }
 
     /**
-     * Check whether both models for the given profile are already downloaded.
+     * Check whether both models for the given profile are already extracted.
      */
     fun areModelsReady(profile: ModelProfile): Boolean {
         return getSttModelFile(profile).exists() && getLlmModelFile(profile).exists()
@@ -78,86 +69,48 @@ class ModelManager(private val context: Context) {
     }
 
     /**
-     * Download a model from the remote repository.
+     * Extract a bundled model from APK assets to internal storage.
      *
-     * @param modelName The model file name (e.g. "ggml-tiny.bin").
-     * @param remoteUrl Full download URL.
-     * @param progress  Callback with (bytesDownloaded, totalBytes).
-     * @return The downloaded [File], or null on failure.
+     * @param assetPath Path inside assets/models/ (e.g. "ggml-tiny.bin").
+     * @param outputFile Destination file.
+     * @param progress  Callback with (bytesCopied, totalBytes).
+     * @return The output [File], or null on failure.
      */
-    fun downloadModel(
-        modelName: String,
-        remoteUrl: String,
+    fun extractModel(
+        assetPath: String,
+        outputFile: File,
         progress: ((Long, Long) -> Unit)? = null,
     ): File? {
-        val outputFile = File(modelsDir, modelName)
         if (outputFile.exists()) {
-            Log.d(tag, "Model $modelName already exists, skipping download")
+            Log.d(tag, "Model $assetPath already extracted, skipping")
             return outputFile
         }
 
         return try {
-            var currentUrl = remoteUrl
-            var redirectCount = 0
-            val maxRedirects = 5
+            val fullAssetPath = "models/$assetPath"
+            val inputStream: InputStream = context.assets.open(fullAssetPath)
+            val totalBytes = inputStream.available().toLong()
+            val outputStream = FileOutputStream(outputFile)
 
-            while (redirectCount < maxRedirects) {
-                val url = URL(currentUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.instanceFollowRedirects = false  // on gère nous-mêmes
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 120_000
-                connection.setRequestProperty("User-Agent", "TranscriptoLocal/0.1.0 Android")
-                connection.connect()
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            var totalRead: Long = 0L
 
-                val responseCode = connection.responseCode
-                Log.d(tag, "HTTP $responseCode -> ${url.host}${url.path}")
-
-                if (responseCode == 302 || responseCode == 301 || responseCode == 307 || responseCode == 308) {
-                    val location = connection.getHeaderField("Location")
-                    Log.d(tag, "Redirect to: $location")
-                    connection.disconnect()
-                    if (location.isNullOrBlank()) return null
-                    currentUrl = location
-                    redirectCount++
-                    continue
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+                totalRead += bytesRead
+                if (totalBytes > 0) {
+                    progress?.invoke(totalRead, totalBytes)
                 }
-
-                if (responseCode == 200 || responseCode == 206) {
-                    val totalBytes = connection.contentLength.let { if (it <= 0) -1L else it.toLong() }
-                    val inputStream: InputStream = connection.inputStream
-                    val outputStream = FileOutputStream(outputFile)
-
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead: Long = 0L
-                    var lastProgressTime = 0L
-
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        if (totalBytes > 0) {
-                            progress?.invoke(totalRead, totalBytes)
-                        }
-                    }
-
-                    outputStream.close()
-                    inputStream.close()
-                    connection.disconnect()
-
-                    Log.d(tag, "Downloaded model $modelName ($totalRead bytes)")
-                    return outputFile
-                }
-
-                Log.e(tag, "Unexpected HTTP $responseCode for $currentUrl")
-                connection.disconnect()
-                return null
             }
 
-            Log.e(tag, "Too many redirects for $modelName")
-            null
+            outputStream.close()
+            inputStream.close()
+
+            Log.d(tag, "Extracted model $assetPath ($totalRead bytes)")
+            outputFile
         } catch (e: Exception) {
-            Log.e(tag, "Failed to download model $modelName", e)
+            Log.e(tag, "Failed to extract model $assetPath", e)
             outputFile.delete()
             null
         }
@@ -165,10 +118,6 @@ class ModelManager(private val context: Context) {
 
     /**
      * Verify a file's SHA-256 hash.
-     *
-     * @param file   The file to check.
-     * @param expectedHex The expected hex-encoded SHA-256 digest.
-     * @return true if the digest matches (or [expectedHex] is empty).
      */
     fun verifyHash(file: File, expectedHex: String): Boolean {
         if (expectedHex.isBlank()) {
@@ -198,8 +147,6 @@ class ModelManager(private val context: Context) {
 
     /**
      * Check available storage space.
-     *
-     * @return Available space in MB, or -1 if unknown.
      */
     fun getAvailableStorageMb(): Long {
         return try {

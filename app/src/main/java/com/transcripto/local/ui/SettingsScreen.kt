@@ -12,18 +12,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.transcripto.local.models.ModelManager
-import com.transcripto.local.models.ModelProfile
 import com.transcripto.local.models.ModelProfiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-data class ModelProfileInfo(
-    val name: String,
-    val sttModel: String,
-    val llmModel: String,
-    val isActive: Boolean,
-)
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,20 +25,17 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
     val modelManager = remember { ModelManager(context) }
     val scope = rememberCoroutineScope()
 
-    // Profil sélectionné (par défaut : détection automatique)
-    var selectedProfile by remember { mutableStateOf<ModelProfile?>(null) }
-    var detectedProfile by remember { mutableStateOf(modelManager.detectProfile()) }
+    // Profil fixe : on embarque le profil ULTRA_LIGHT (Whisper Tiny + Qwen2 0.5B)
+    val profile = ModelProfiles.ULTRA_LIGHT.profile
 
-    // États de téléchargement
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadProgress by remember { mutableFloatStateOf(0f) }
-    var downloadStatus by remember { mutableStateOf("") }
-    var downloadError by remember { mutableStateOf<String?>(null) }
+    // États d'extraction
+    var isExtracting by remember { mutableStateOf(false) }
+    var extractProgress by remember { mutableFloatStateOf(0f) }
+    var extractStatus by remember { mutableStateOf("") }
+    var extractError by remember { mutableStateOf<String?>(null) }
 
-    // Modèles prêts ?
-    val currentProfile = selectedProfile ?: detectedProfile
     val modelsReady by remember {
-        derivedStateOf { modelManager.areModelsReady(currentProfile) }
+        derivedStateOf { modelManager.areModelsReady(profile) }
     }
 
     var lockEnabled by remember { mutableStateOf(false) }
@@ -66,65 +56,32 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
             )
         }
 
-        // === S\u00e9lection du profil mat\u00e9riel ===
+        // === Mod\u00e8les embarqu\u00e9s ===
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Profil mat\u00e9riel",
+                        text = "Mod\u00e8les",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
 
                     Text(
-                        text = "D\u00e9tect\u00e9 : ${detectedProfile.label}",
-                        fontSize = 13.sp,
+                        text = profile.label,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = "STT: ${profile.sttModel} \u00b7 LLM: ${profile.llmModel}",
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
 
-                    ModelProfiles.entries.forEach { entry ->
-                        val profile = entry.profile
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = profile == currentProfile,
-                                onClick = {
-                                    selectedProfile = profile
-                                    downloadError = null
-                                },
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = profile.label,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 14.sp
-                                )
-                                Text(
-                                    text = "STT: ${profile.sttModel} \u00b7 LLM: ${profile.llmModel}",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            // Badge taille
-                            val totalMb = profile.sttSize + profile.llmSize
-                            Text(
-                                text = "${totalMb} Mo",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-                    // Statut des mod\u00e8les
+                    // Statut
                     if (modelsReady) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -138,43 +95,42 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                             )
                             TextButton(onClick = {
                                 scope.launch {
-                                    modelManager.unloadModels(currentProfile)
+                                    modelManager.unloadModels(profile)
                                 }
                             }) {
                                 Text("Supprimer", color = MaterialTheme.colorScheme.error)
                             }
                         }
-                    } else if (isDownloading) {
-                        // Barre de progression
+                    } else if (isExtracting) {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = downloadStatus,
+                                text = extractStatus,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             LinearProgressIndicator(
-                                progress = { downloadProgress },
+                                progress = { extractProgress },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
-                                text = "${(downloadProgress * 100).toInt()}%",
+                                text = "${(extractProgress * 100).toInt()}%",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.End
                             )
                         }
-                    } else if (downloadError != null) {
+                    } else if (extractError != null) {
                         Text(
-                            text = "\u274c $downloadError",
+                            text = "\u274c $extractError",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     } else {
                         Text(
-                            text = "Mod\u00e8les non t\u00e9l\u00e9charg\u00e9s (${currentProfile.sttModel} + ${currentProfile.llmModel})",
+                            text = "Mod\u00e8les embarqu\u00e9s dans l'APK \u2014 extraction n\u00e9cessaire au premier lancement.",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -182,82 +138,55 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Bouton t\u00e9l\u00e9charger
-                    if (!modelsReady && !isDownloading) {
+                    if (!modelsReady && !isExtracting) {
                         Button(
                             onClick = {
                                 scope.launch {
-                                    isDownloading = true
-                                    downloadError = null
-                                    downloadProgress = 0f
-                                    downloadStatus = "Pr\u00e9paration..."
+                                    isExtracting = true
+                                    extractError = null
+                                    extractProgress = 0f
+                                    extractStatus = "Pr\u00e9paration..."
 
-                                    // STT puis LLM avec leurs bons repos HuggingFace
-                                    data class ModelDownload(
-                                        val name: String,
-                                        val file: String,
-                                        val repo: String,
-                                        val sizeMb: Int,
+                                    val files = listOf(
+                                        profile.sttFile to profile.sttModel,
+                                        profile.llmFile to profile.llmModel
                                     )
 
-                                    val downloads = listOf(
-                                        ModelDownload(
-                                            name = currentProfile.sttModel,
-                                            file = currentProfile.sttFile,
-                                            repo = currentProfile.sttRepo,
-                                            sizeMb = currentProfile.sttSize,
-                                        ),
-                                        ModelDownload(
-                                            name = currentProfile.llmModel,
-                                            file = currentProfile.llmFile,
-                                            repo = currentProfile.llmRepo,
-                                            sizeMb = currentProfile.llmSize,
-                                        ),
-                                    )
+                                    val totalBytes = (profile.sttSize.toLong() + profile.llmSize.toLong()) * 1024L * 1024L
+                                    var totalExtracted = 0L
 
-                                    val totalBytes = downloads.sumOf { it.sizeMb.toLong() } * 1024L * 1024L
-                                    var totalDownloaded = 0L
-
-                                    for (dl in downloads) {
-                                        downloadStatus = "${dl.name}..."
-                                        val url = "https://huggingface.co/${dl.repo}/resolve/main/${dl.file}"
+                                    for ((fileName, displayName) in files) {
+                                        extractStatus = "$displayName..."
+                                        val outputFile = File(modelManager.modelsDir, fileName)
 
                                         val result = withContext(Dispatchers.IO) {
-                                            try {
-                                                modelManager.downloadModel(
-                                                    modelName = dl.file,
-                                                    remoteUrl = url,
-                                                    progress = { downloaded, total ->
-                                                        val fileFraction = downloaded.toFloat() / total.toFloat()
-                                                        downloadProgress = (totalDownloaded + fileFraction * totalBytes) / totalBytes
-                                                        downloadStatus = "${dl.name} : ${downloaded / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
-                                                    }
-                                                )
-                                            } catch (e: Exception) {
-                                                downloadError = "${e.message?.take(80) ?: "Erreur inconnue"}"
-                                                null
-                                            }
+                                            modelManager.extractModel(
+                                                assetPath = fileName,
+                                                outputFile = outputFile,
+                                                progress = { copied, total ->
+                                                    val fileFraction = copied.toFloat() / total.toFloat()
+                                                    extractProgress = (totalExtracted + fileFraction * totalBytes) / totalBytes
+                                                    extractStatus = "$displayName : ${copied / (1024 * 1024)}/${total / (1024 * 1024)} Mo"
+                                                }
+                                            )
                                         }
 
                                         if (result == null) {
-                                            if (downloadError.isNullOrBlank()) downloadError = "Échec : ${dl.name}"
-                                            isDownloading = false
+                                            extractError = "\u00c9chec d'extraction de $displayName"
+                                            isExtracting = false
                                             return@launch
                                         }
-                                        totalDownloaded += dl.sizeMb.toLong() * 1024L * 1024L
+                                        totalExtracted += totalBytes / files.size
                                     }
 
-                                    downloadProgress = 1f
-                                    downloadStatus = "Mod\u00e8les pr\u00eats !"
-                                    isDownloading = false
+                                    extractProgress = 1f
+                                    extractStatus = "Mod\u00e8les pr\u00eats !"
+                                    isExtracting = false
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("T\u00e9l\u00e9charger les mod\u00e8les")
+                            Text("Extraire les mod\u00e8les")
                         }
                     }
                 }
@@ -314,7 +243,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                     Text(
-                        text = "Mod\u00e8les t\u00e9l\u00e9charg\u00e9s, enregistrements et transcriptions.",
+                        text = "Mod\u00e8les, enregistrements et transcriptions.",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
