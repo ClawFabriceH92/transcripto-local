@@ -1,12 +1,10 @@
 package com.transcripto.local.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -14,13 +12,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.transcripto.local.data.LocalAppState
 import com.transcripto.local.data.Recording
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalyzeScreen(modifier: Modifier = Modifier) {
     val appState = LocalAppState.current
+    val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("R\u00e9sum\u00e9", "Points cl\u00e9s", "Actions", "Question")
+    var analyzing by remember { mutableStateOf(false) }
 
     val recordings = appState.recordings.filter { it.isTranscribed }
     val selectedRecording = appState.getSelectedRecording()
@@ -37,7 +39,6 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        // Sélection de l'enregistrement
         if (recordings.isEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -53,27 +54,29 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
             return
         }
 
-        // Dropdown pour choisir l'enregistrement
-        var expanded by remember { mutableStateOf(false) }
+        // Dropdown de s\u00e9lection
+        var menuExpanded by remember { mutableStateOf(false) }
 
         ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it }
+            expanded = menuExpanded,
+            onExpandedChange = { menuExpanded = it }
         ) {
             OutlinedTextField(
-                value = selectedRecording?.let { "${it.date} (${it.duration})" } ?: "S\u00e9lectionner un enregistrement",
+                value = selectedRecording?.let { "${it.date} (${it.duration})" }
+                    ?: "S\u00e9lectionner un enregistrement",
                 onValueChange = {},
                 readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(),
                 textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                singleLine = true,
             )
 
             ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
             ) {
                 recordings.forEach { rec ->
                     DropdownMenuItem(
@@ -91,7 +94,7 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                         },
                         onClick = {
                             appState.selectedRecordingId = rec.id
-                            expanded = false
+                            menuExpanded = false
                         }
                     )
                 }
@@ -100,8 +103,42 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (selectedRecording == null) return
+        val recording = selectedRecording ?: return
 
+        // Bouton g\u00e9n\u00e9rer l'analyse
+        if (recording.summary.isBlank() && !analyzing) {
+            Button(
+                onClick = {
+                    analyzing = true
+                    scope.launch {
+                        // Simule l'appel LLM
+                        delay(1500)
+                        appState.setAnalysis(
+                            id = recording.id,
+                            summary = "R\u00e9sum\u00e9 de l'enregistrement du ${recording.date}. Contenu: ${recording.fullText.take(100)}...",
+                            keyPoints = "Point 1: Premier sujet abord\u00e9\nPoint 2: Deuxi\u00e8me point important\nPoint 3: Conclusion",
+                            actions = "Action 1: Suivre la proc\u00e9dure\nAction 2: Programmez une r\u00e9union de suivi",
+                        )
+                        analyzing = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("G\u00e9n\u00e9rer l'analyse", fontSize = 14.sp)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        } else if (analyzing) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Analyse en cours...",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // Onglets
         TabRow(selectedTabIndex = selectedTab) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -129,10 +166,10 @@ fun AnalyzeScreen(modifier: Modifier = Modifier) {
                 .verticalScroll(scrollState)
         ) {
             when (selectedTab) {
-                0 -> AnalysisCard(title = "R\u00e9sum\u00e9", text = selectedRecording.summary.ifBlank { "Le r\u00e9sum\u00e9 sera g\u00e9n\u00e9r\u00e9 par le LLM." })
-                1 -> AnalysisCard(title = "Points cl\u00e9s", text = selectedRecording.keyPoints.ifBlank { "Les points cl\u00e9s seront extraits par le LLM." })
-                2 -> AnalysisCard(title = "Actions", text = selectedRecording.actions.ifBlank { "Les actions seront identifi\u00e9es par le LLM." })
-                3 -> QaSection(fullText = selectedRecording.fullText)
+                0 -> AnalysisCard(title = "R\u00e9sum\u00e9", text = recording.summary.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour obtenir le r\u00e9sum\u00e9." })
+                1 -> AnalysisCard(title = "Points cl\u00e9s", text = recording.keyPoints.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour extraire les points cl\u00e9s." })
+                2 -> AnalysisCard(title = "Actions", text = recording.actions.ifBlank { "Cliquez sur 'G\u00e9n\u00e9rer l'analyse' pour lister les actions." })
+                3 -> QaSection(fullText = recording.fullText)
             }
         }
 

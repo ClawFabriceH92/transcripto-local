@@ -28,7 +28,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var expandedId by remember { mutableStateOf<Long?>(null) }
 
-    // Copie locale pour la réactivité
     val recordings = appState.recordings.toList()
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -61,6 +60,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
+                            // Ligne principale
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -84,7 +84,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                     )
                                 }
 
-                                // Progression
+                                // Barre progression ou bouton Transcrire ou ic\u00f4ne OK
                                 if (appState.transcribingId == item.id) {
                                     Column(
                                         modifier = Modifier
@@ -109,14 +109,14 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                             appState.transcribingId = item.id
                                             appState.transcribeProgress = 0f
                                             scope.launch {
-                                                // Simulation : remplacer par appel STT réel
+                                                // Simulation: remplace par appel STT
                                                 for (i in 1..100) {
                                                     delay(50)
                                                     appState.transcribeProgress = i / 100f
                                                 }
                                                 appState.setTranscription(
                                                     id = item.id,
-                                                    text = "Transcription de l'enregistrement du ${item.date} (durée ${item.duration}). Ce texte sera remplacé par la sortie de Whisper."
+                                                    text = "Transcription de l'enregistrement du ${item.date} (dur\u00e9e ${item.duration}). Ce texte sera remplac\u00e9 par la sortie de Whisper."
                                                 )
                                                 appState.transcribingId = null
                                             }
@@ -127,7 +127,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         Text("Transcrire", fontSize = 13.sp)
                                     }
                                 } else {
-                                    // Transcrit : icône statut
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.padding(end = 8.dp)
@@ -160,7 +159,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                 }
                             }
 
-                            // Texte transcrit (dépliable)
+                            // Texte transcrit d\u00e9pliable
                             AnimatedVisibility(visible = expandedId == item.id) {
                                 HorizontalDivider()
                                 Column(
@@ -168,11 +167,20 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 12.dp)
                                 ) {
-                                    val text = item.fullText.ifBlank {
-                                        "Transcription en attente..."
-                                    }
+                                    // Date + dur\u00e9e en haut
                                     Text(
-                                        text = text,
+                                        text = "${item.date} \u2014 ${item.duration}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+
+                                    // Le texte transcrit
+                                    Text(
+                                        text = item.fullText.ifBlank {
+                                            "Transcription en attente..."
+                                        },
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp,
                                         color = MaterialTheme.colorScheme.onSurface
