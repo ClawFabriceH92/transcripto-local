@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -16,34 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.transcripto.local.data.LocalAppState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-data class TranscriptionItem(
-    val id: Long,
-    val date: String,
-    val duration: String,
-    val summary: String = "",
-    val fullText: String = "",
-    val isTranscribed: Boolean = false,
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TranscribeScreen(modifier: Modifier = Modifier) {
+    val appState = LocalAppState.current
     val scope = rememberCoroutineScope()
-
-    var recordings by remember {
-        mutableStateOf(
-            listOf(
-                TranscriptionItem(1, "19 juil. 2026", "32 min", isTranscribed = false),
-            )
-        )
-    }
-
-    var transcribingId by remember { mutableStateOf<Long?>(null) }
-    var transcribeProgress by remember { mutableFloatStateOf(0f) }
     var expandedId by remember { mutableStateOf<Long?>(null) }
+
+    // Copie locale pour la réactivité
+    val recordings = appState.recordings.toList()
 
     Column(modifier = modifier.fillMaxSize()) {
         Text(
@@ -75,7 +61,6 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            // Ligne principale
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -99,8 +84,8 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                     )
                                 }
 
-                                // Barre de progression si en cours de transcription
-                                if (transcribingId == item.id) {
+                                // Progression
+                                if (appState.transcribingId == item.id) {
                                     Column(
                                         modifier = Modifier
                                             .width(120.dp)
@@ -108,12 +93,12 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         LinearProgressIndicator(
-                                            progress = { transcribeProgress },
+                                            progress = { appState.transcribeProgress },
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "${(transcribeProgress * 100).toInt()}%",
+                                            text = "${(appState.transcribeProgress * 100).toInt()}%",
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -121,42 +106,52 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                 } else if (!item.isTranscribed) {
                                     FilledTonalButton(
                                         onClick = {
-                                            transcribingId = item.id
-                                            transcribeProgress = 0f
+                                            appState.transcribingId = item.id
+                                            appState.transcribeProgress = 0f
                                             scope.launch {
-                                                // Simulation de transcription progressive
+                                                // Simulation : remplacer par appel STT réel
                                                 for (i in 1..100) {
-                                                    delay(60)
-                                                    transcribeProgress = i / 100f
+                                                    delay(50)
+                                                    appState.transcribeProgress = i / 100f
                                                 }
-                                                recordings = recordings.map { r ->
-                                                    if (r.id == item.id) r.copy(
-                                                        isTranscribed = true,
-                                                        fullText = "Ceci est le texte transcrit de l'enregistrement du ${item.date}. Il s'agit d'une transcription complète avec tout le contenu de l'audio. Les prochains paragraphes détaillent les différents sujets abordés pendant la réunion ou l'entretien. Le texte complet est disponible ci-dessous en cliquant sur la carte."
-                                                    )
-                                                    else r
-                                                }
-                                                transcribingId = null
+                                                appState.setTranscription(
+                                                    id = item.id,
+                                                    text = "Transcription de l'enregistrement du ${item.date} (durée ${item.duration}). Ce texte sera remplacé par la sortie de Whisper."
+                                                )
+                                                appState.transcribingId = null
                                             }
                                         },
                                         modifier = Modifier.padding(end = 8.dp),
-                                        enabled = transcribingId == null
+                                        enabled = appState.transcribingId == null
                                     ) {
                                         Text("Transcrire", fontSize = 13.sp)
                                     }
                                 } else {
-                                    // Icône pour indiquer qu'on peut développer
-                                    Icon(
-                                        imageVector = if (expandedId == item.id) Icons.Default.ExpandLess
-                                                       else Icons.Default.ExpandMore,
-                                        contentDescription = if (expandedId == item.id) "Réduire"
-                                                             else "Voir le texte",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    )
+                                    // Transcrit : icône statut
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Transcrit",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            imageVector = if (expandedId == item.id) Icons.Default.ExpandLess
+                                                           else Icons.Default.ExpandMore,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
 
-                                IconButton(onClick = { /* supprimer */ }) {
+                                IconButton(onClick = {
+                                    appState.recordings.removeAll { it.id == item.id }
+                                }) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = "Supprimer",
@@ -173,16 +168,14 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 12.dp)
                                 ) {
+                                    val text = item.fullText.ifBlank {
+                                        "Transcription en attente..."
+                                    }
                                     Text(
-                                        text = item.fullText.ifBlank { "Texte transcrit indisponible." },
+                                        text = text,
                                         fontSize = 14.sp,
                                         lineHeight = 20.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                expandedId = if (expandedId == item.id) null else item.id
-                                            }
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(

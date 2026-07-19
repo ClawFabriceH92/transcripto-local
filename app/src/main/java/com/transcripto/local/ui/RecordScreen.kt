@@ -2,8 +2,7 @@ package com.transcripto.local.ui
 
 import android.Manifest
 import android.content.Context
-import android.media.MediaRecorder
-import android.os.Build
+import android.content.pm.PackageManager
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -16,10 +15,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.transcripto.local.data.LocalAppState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun RecordScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val appState = LocalAppState.current
     var isRecording by remember { mutableStateOf(false) }
     var isPaused by remember { mutableStateOf(false) }
     var elapsedSeconds by remember { mutableIntStateOf(0) }
@@ -37,7 +41,7 @@ fun RecordScreen(modifier: Modifier = Modifier) {
 
     val permissionGranted = ContextCompat.checkSelfPermission(
         context, Manifest.permission.RECORD_AUDIO
-    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    ) == PackageManager.PERMISSION_GRANTED
 
     Column(
         modifier = modifier
@@ -97,8 +101,16 @@ fun RecordScreen(modifier: Modifier = Modifier) {
         // Bouton enregistrer
         Button(
             onClick = {
-                isRecording = !isRecording
-                if (!isRecording) {
+                val startRecord = !isRecording
+                isRecording = startRecord
+                if (!startRecord) {
+                    // On arrête → on ajoute aux enregistrements
+                    val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.FRENCH)
+                    val now = dateFormat.format(Date())
+                    appState.addRecording(
+                        date = now,
+                        duration = formatDuration(elapsedSeconds),
+                    )
                     isPaused = false
                     elapsedSeconds = 0
                 }
@@ -111,7 +123,7 @@ fun RecordScreen(modifier: Modifier = Modifier) {
             )
         ) {
             Text(
-                text = if (isRecording) "■" else "●",
+                text = if (isRecording) "\u25A0" else "\u25CF",
                 fontSize = 36.sp,
                 color = Color.White
             )
@@ -130,7 +142,7 @@ fun RecordScreen(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.weight(1f))
 
         Text(
-            text = "Aucune donnée ne quitte l'appareil",
+            text = "Aucune donn\u00e9e ne quitte l'appareil",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

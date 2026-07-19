@@ -18,32 +18,35 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.ContextCompat
-import com.transcripto.local.ui.RecordScreen
-import com.transcripto.local.ui.TranscribeScreen
+import com.transcripto.local.data.AppState
+import com.transcripto.local.data.LocalAppState
 import com.transcripto.local.ui.AnalyzeScreen
+import com.transcripto.local.ui.RecordScreen
 import com.transcripto.local.ui.SettingsScreen
+import com.transcripto.local.ui.TranscribeScreen
 
 class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
-            if (!isGranted) {
-                // Permission denied — show rationale or disable recording
-            }
-        }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestAudioPermission()
         setContent {
-            TranscriptoLocalApp()
+            val appState = remember { AppState() }
+            CompositionLocalProvider(LocalAppState provides appState) {
+                TranscriptoLocalApp()
+            }
         }
     }
 
@@ -51,14 +54,7 @@ class MainActivity : ComponentActivity() {
         when {
             ContextCompat.checkSelfPermission(
                 this, Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                // Permission already granted
-            }
-            shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> {
-                // Show educational UI explaining why the permission is needed
-                requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-            }
-            else -> {
+            ) != PackageManager.PERMISSION_GRANTED -> {
                 requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
