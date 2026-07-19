@@ -99,8 +99,9 @@ class ModelManager(private val context: Context) {
         return try {
             val url = URL(remoteUrl)
             val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 30_000
-            connection.readTimeout = 60_000
+            connection.instanceFollowRedirects = true
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 120_000
             connection.connect()
 
             val totalBytes = connection.contentLength.toLong()
