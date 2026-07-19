@@ -104,11 +104,13 @@ fun RecordScreen(modifier: Modifier = Modifier) {
                 val startRecord = !isRecording
                 isRecording = startRecord
                 if (!startRecord) {
-                    // On arrête → on ajoute aux enregistrements
+                    // On arr\u00eate \u2192 on ajoute aux enregistrements
                     val dateFormat = SimpleDateFormat("d MMM yyyy", Locale.FRENCH)
-                    val now = dateFormat.format(Date())
+                    val timeFormat = SimpleDateFormat("HH:mm", Locale.FRENCH)
+                    val now = Date()
                     appState.addRecording(
-                        date = now,
+                        date = dateFormat.format(now),
+                        time = timeFormat.format(now),
                         duration = formatDuration(elapsedSeconds),
                     )
                     isPaused = false

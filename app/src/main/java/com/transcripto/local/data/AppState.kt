@@ -24,12 +24,13 @@ class AppState {
     /** Incrémenté à chaque nouvel enregistrement. */
     private var nextId = 1L
 
-    fun addRecording(date: String, duration: String, audioPath: String = "") {
+    fun addRecording(date: String, time: String, duration: String, audioPath: String = "") {
         recordings.add(
-            0, // en premier
+            0,
             Recording(
                 id = nextId++,
                 date = date,
+                time = time,
                 duration = duration,
                 audioPath = audioPath,
             )

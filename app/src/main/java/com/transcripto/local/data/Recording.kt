@@ -6,6 +6,7 @@ package com.transcripto.local.data
 data class Recording(
     val id: Long,
     val date: String,
+    val time: String,
     val duration: String,
     val audioPath: String = "",
     var fullText: String = "",
