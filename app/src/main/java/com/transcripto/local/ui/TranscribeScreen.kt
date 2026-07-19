@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.transcripto.local.data.AppLogger
 import com.transcripto.local.data.LocalAppState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -116,6 +117,7 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                 } else if (!item.isTranscribed) {
                                     FilledTonalButton(
                                         onClick = {
+                                            AppLogger.i("Transcription lancée pour l'enregistrement #${item.id}")
                                             appState.transcribingId = item.id
                                             appState.transcribeProgress = 0f
                                             scope.launch {
@@ -126,9 +128,10 @@ fun TranscribeScreen(modifier: Modifier = Modifier) {
                                                 }
                                                 appState.setTranscription(
                                                     id = item.id,
-                                                    text = "Alors, l'objectif de cette r\u00e9union \u00e9tait de faire le point sur l'avancement du projet. On a abord\u00e9 plusieurs points importants. D'abord, la partie technique avec la mise en place de l'infrastructure, ensuite les d\u00e9lais qui sont un peu serr\u00e9s, et enfin les prochaines \u00e9tapes \u00e0 pr\u00e9voir.\n\nPour la partie finance, il faut pr\u00e9voir un budget suppl\u00e9mentaire pour les outils. Je pense qu'on peut demander une rallonge aupr\u00e8s de la direction. C'est un projet prioritaire donc \u00e7a devrait passer sans trop de difficult\u00e9s.\n\nVoil\u00e0, c'\u00e9tait le r\u00e9sum\u00e9 de l'enregistrement."
+                                                    text = "Alors, l'objectif de cette reunion etait de faire le point sur l'avancement du projet. On a aborde plusieurs points importants. D'abord, la partie technique avec la mise en place de l'infrastructure, ensuite les delais qui sont un peu serres, et enfin les prochaines etapes a prevoir.\n\nPour la partie finance, il faut prevoir un budget supplementaire pour les outils. Je pense qu'on peut demander une rallonge aupres de la direction. C'est un projet prioritaire donc ca devrait passer sans trop de difficultes.\n\nVoila, c'etait le resume de l'enregistrement."
                                                 )
                                                 appState.transcribingId = null
+                                                AppLogger.i("Transcription terminée pour l'enregistrement #${item.id}")
                                             }
                                         },
                                         modifier = Modifier.padding(end = 8.dp),

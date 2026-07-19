@@ -1,5 +1,9 @@
 package com.transcripto.local.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
@@ -11,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.transcripto.local.data.AppLogger
 import com.transcripto.local.models.ModelManager
 import com.transcripto.local.models.ModelProfiles
 import kotlinx.coroutines.Dispatchers
@@ -146,6 +151,7 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                                     extractError = null
                                     extractProgress = 0f
                                     extractStatus = "Pr\u00e9paration..."
+                                    AppLogger.i("Extraction des mod\u00e8les...")
 
                                     val files = listOf(
                                         profile.sttFile to profile.sttModel,
@@ -255,6 +261,65 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
                         )
                     ) {
                         Text("Tout effacer")
+                    }
+                }
+            }
+        }
+
+        // === Diagnostic ===
+        item {
+            var showLogs by remember { mutableStateOf(false) }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Diagnostic",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { showLogs = !showLogs }) {
+                            Text(if (showLogs) "Masquer" else "Voir les logs")
+                        }
+                    }
+
+                    if (showLogs) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        val logText = remember { AppLogger.getText() }
+                        val context = LocalContext.current
+
+                        Text(
+                            text = logText.ifBlank { "Aucun log pour l'instant." },
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 200.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("logs", AppLogger.getText())
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, "Logs copi\u00e9s", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Copier les logs", fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             }

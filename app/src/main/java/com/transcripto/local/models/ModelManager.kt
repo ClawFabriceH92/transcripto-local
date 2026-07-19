@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StatFs
 import android.util.Log
+import com.transcripto.local.data.AppLogger
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -51,7 +52,10 @@ class ModelManager(private val context: Context) {
      * Check whether both models for the given profile are already extracted.
      */
     fun areModelsReady(profile: ModelProfile): Boolean {
-        return getSttModelFile(profile).exists() && getLlmModelFile(profile).exists()
+        val sttReady = getSttModelFile(profile).exists()
+        val llmReady = getLlmModelFile(profile).exists()
+        AppLogger.i("areModelsReady: STT=$sttReady (${getSttModelFile(profile).absolutePath}), LLM=$llmReady (${getLlmModelFile(profile).absolutePath})")
+        return sttReady && llmReady
     }
 
     /**
@@ -82,14 +86,16 @@ class ModelManager(private val context: Context) {
         progress: ((Long, Long) -> Unit)? = null,
     ): File? {
         if (outputFile.exists()) {
-            Log.d(tag, "Model $assetPath already extracted, skipping")
+            AppLogger.i("extractModel: $assetPath déjà extrait → skip")
             return outputFile
         }
 
         return try {
+            AppLogger.i("extractModel: début extraction $assetPath (${outputFile.absolutePath})")
             val fullAssetPath = "models/$assetPath"
             val inputStream: InputStream = context.assets.open(fullAssetPath)
             val totalBytes = inputStream.available().toLong()
+            AppLogger.i("extractModel: $assetPath → ${totalBytes / (1024*1024)} Mo à extraire")
             val outputStream = FileOutputStream(outputFile)
 
             val buffer = ByteArray(8192)
@@ -107,9 +113,10 @@ class ModelManager(private val context: Context) {
             outputStream.close()
             inputStream.close()
 
-            Log.d(tag, "Extracted model $assetPath ($totalRead bytes)")
+            AppLogger.i("extractModel: $assetPath extrait avec succès ($totalRead bytes)")
             outputFile
         } catch (e: Exception) {
+            AppLogger.e("extractModel: échec $assetPath → ${e.message}")
             Log.e(tag, "Failed to extract model $assetPath", e)
             outputFile.delete()
             null
